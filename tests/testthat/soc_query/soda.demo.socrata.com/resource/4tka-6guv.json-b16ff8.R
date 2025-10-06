@@ -1,0 +1,16 @@
+structure(list(method = "GET", url = "https://soda.demo.socrata.com/resource/4tka-6guv.json?%24select=source&%24order=source&%24limit=10", 
+    status_code = 200L, headers = structure(list(Server = "nginx", 
+        Date = "Mon, 18 Aug 2025 16:31:10 GMT", `Content-Type` = "application/json;charset=utf-8", 
+        `Transfer-Encoding` = "chunked", Connection = "keep-alive", 
+        `Access-Control-Allow-Origin` = "*", ETag = "\"Zm94dHJvdC4zMzQxMl80XzEyMnhBZlpVc0hBTnMxUmh5d2syWDJFeExqTmlHSQ-2NUXave0FniAmVTc5OoUFTdTOk8--gzip--gzip\"", 
+        `X-SODA2-Fields` = "[\"source\"]", `X-SODA2-Types` = "[\"text\"]", 
+        `X-SODA2-Data-Out-Of-Date` = "false", `X-SODA2-Truth-Last-Modified` = "Wed, 04 Sep 2019 17:25:46 GMT", 
+        `X-SODA2-Secondary-Last-Modified` = "Wed, 04 Sep 2019 17:25:46 GMT", 
+        `Last-Modified` = "Wed, 04 Sep 2019 17:25:46 GMT", Vary = "Accept-Encoding", 
+        `Content-Encoding` = "gzip", Age = "0", `X-Socrata-Region` = "aws-us-east-1-fedramp-prod", 
+        `Strict-Transport-Security` = "max-age=31536000; includeSubDomains", 
+        `X-Socrata-RequestId` = "c186acf09db625736fba8eacd82f3e3e"), class = "httr2_headers"), 
+    body = charToRaw("[{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}\n,{\"source\":\"ak\"}]\n"), 
+    timing = c(redirect = 0, namelookup = 1.3e-05, connect = 0, 
+    pretransfer = 7.7e-05, starttransfer = 0.149369, total = 0.149438
+    ), cache = new.env(parent = emptyenv())), class = "httr2_response")

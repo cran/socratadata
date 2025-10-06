@@ -21,69 +21,71 @@
 #' )
 #' print(query)
 #'
-#' \donttest{
+#' @examplesIf interactive() && httr2::is_online()
 #' earthquakes_by_region <- soc_read(
 #'   "https://soda.demo.socrata.com/dataset/USGS-Earthquakes-2012-11-08/3wfw-mdbc/",
 #'   query = query
 #' )
-#' }
 #'
 #' @seealso Use this with a function that executes Socrata requests, e.g., `soc_read(url, query = soc_query(...))`
 #'
 #' @export
 soc_query <- function(
-  select = NULL,
+  select = "*",
   where = NULL,
   group_by = NULL,
   having = NULL,
   order_by = NULL,
   limit = NULL
 ) {
-  check_string(select, allow_null = TRUE)
+  check_string(select)
   check_string(where, allow_null = TRUE)
   check_string(group_by, allow_null = TRUE)
   check_string(having, allow_null = TRUE)
   check_string(order_by, allow_null = TRUE)
   check_number_whole(limit, allow_null = TRUE)
 
-  structure(
-    list(
-      `$select` = select,
-      `$where` = where,
-      `$group` = group_by,
-      `$having` = having,
-      `$order` = order_by,
-      `$limit` = limit
-    ),
-    class = "soc_query"
-  )
+  query <- as.list(environment())
+  class(query) <- "soc_query"
+
+  query
 }
 
 #' @export
 print.soc_query <- function(x, ...) {
-  query <- vector(mode = "character")
-  if (!is.null(x$`$select`)) {
-    query <- c(query, paste0("{.strong SELECT} ", x$`$select`))
-  }
-  if (!is.null(x$`$where`)) {
-    query <- c(query, paste0("{.strong WHERE} ", x$`$where`))
-  }
-  if (!is.null(x$`$group`)) {
-    query <- c(query, paste0("{.strong GROUP BY} ", x$`$group`))
-  }
-  if (!is.null(x$`$having`)) {
-    query <- c(query, paste0("{.strong HAVING} ", x$`$having`))
-  }
-  if (!is.null(x$`$order`)) {
-    query <- c(query, paste0("{.strong ORDER BY} ", x$`$order`))
-  }
-  if (!is.null(x$`$limit`)) {
-    query <- c(query, paste0("{.strong LIMIT} ", x$`$limit`))
-  }
+  query_parts <- get_query_parts(x)
 
-  for (line in query) {
+  lines <- paste(
+    paste0("{.strong ", query_parts$clauses, "}"),
+    query_parts$params
+  )
+
+  for (line in lines) {
     cli::cli_text(line)
   }
 
   invisible(x)
+}
+
+stringify_query <- function(query) {
+  if (is.character(query)) {
+    return(query)
+  }
+  if (is.null(query$select)) {
+    query$select <- "*"
+  }
+
+  query_parts <- get_query_parts(query)
+  paste(query_parts$clauses, query_parts$params, collapse = " ")
+}
+
+get_query_parts <- function(query) {
+  action_is_not_null <- !vapply(query, is.null, logical(1))
+
+  list(
+    clauses = names(query)[action_is_not_null] |>
+      gsub(pattern = "_", replacement = " ") |>
+      toupper(),
+    params = query[action_is_not_null]
+  )
 }

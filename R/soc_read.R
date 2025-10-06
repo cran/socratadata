@@ -4,13 +4,18 @@
 #' Metadata is also returned as attributes on the returned object.
 #'
 #' @param url string; URL of the Socrata dataset.
-#' @param query `soc_query()`; Query parameters specification
+#' @param query string or `soc_query()`; Query parameters specification
 #' @param alias string; Use of field alias values. There are three options:
 #'
 #'  - `"label"`: field alias values are assigned as a label attribute for each field.
 #'  - `"replace"`: field alias values replace existing column names.
 #'  - `"drop"`: field alias values replace existing column names.
 #' @param page_size whole number; Maximum number of rows returned per request.
+#' @param include_synthetic_cols logical; Should synthetic columns be included?
+#' @param api_key_id string; API key ID to authenticate requests. (Can also be stored as `"soc_api_key_id"`
+#' environment variable)
+#' @param api_key_secret string; API key secret to authenticate requests. (Can also be stored as `"soc_api_key_secret"`
+#' environment variable)
 #'
 #' @return A tibble with additional attributes containing dataset metadata.
 #' If the dataset contains a single non-nested geospatial field, it will be returned as an `sf` object.
@@ -42,8 +47,7 @@
 #'   \item{license}{License associated with the asset.}
 #' }
 #'
-#' @examples
-#' \donttest{
+#' @examplesIf interactive() && httr2::is_online()
 #' soc_read(
 #'   "https://soda.demo.socrata.com/dataset/USGS-Earthquakes-2012-11-08/3wfw-mdbc/"
 #' )
@@ -57,17 +61,21 @@
 #'     order_by = "avg_magnitude DESC"
 #'   )
 #' )
-#' }
 #'
 #' @export
 soc_read <- function(
   url,
   query = soc_query(),
   alias = "label",
-  page_size = 10000
+  page_size = 10000,
+  include_synthetic_cols = TRUE,
+  api_key_id = NULL,
+  api_key_secret = NULL
 ) {
   check_string(url)
-  if (!inherits(query, "soc_query")) {
+  if (is.character(query)) {
+    check_string(query)
+  } else if (!inherits(query, "soc_query")) {
     stop_input_type(
       query,
       "a <soc_query> object",
@@ -77,111 +85,127 @@ soc_read <- function(
   }
   check_string(alias)
   rlang::arg_match(alias, c("label", "replace", "drop"))
+  check_number_whole(page_size, min = 1)
+  check_string(api_key_id, allow_null = TRUE)
+  check_string(api_key_secret, allow_null = TRUE)
 
-  url_base <- httr2::url_modify(
-    url,
-    username = NULL,
-    password = NULL,
-    port = NULL,
-    path = NULL,
-    query = NULL,
-    fragment = NULL
-  )
-  four_by_four <- get_four_by_four(url)
-
-  resps <- iterative_requests(url_base, four_by_four, query, page_size)
-
-  res_list <- parse_data_json(
-    json_strs = sapply(resps, httr2::resp_body_string),
-    header_col_names = httr2::resp_header(resps[[1]], "X-SODA2-Fields"),
-    header_col_types = httr2::resp_header(resps[[1]], "X-SODA2-Types"),
-    meta_url = httr2::url_modify(
-      url_base,
-      path = paste0("api/views/", four_by_four)
+  api_key_id <- api_key_id %||% Sys_get_env("soc_api_key_id")
+  api_key_secret <- api_key_secret %||% Sys_get_env("soc_api_key_secret")
+  if (is.null(api_key_id) && is.null(api_key_secret)) {
+    request_version <- "v2"
+    if (!inherits(query, "soc_query")) {
+      cli::cli_abort(
+        "{.arg soc_query} must be a <soc_query> object to perform a v2.1 request. Provide an {.arg api_key_id} and {.arg api_key_secret} to perform a v3 request."
+      )
+    }
+    cli::cli_alert_info(
+      "Utilizing v2.1 API. {.arg include_synthetic_cols} will be ignored. Provide an {.arg api_key_id} and {.arg api_key_secret} to perform a v3 request."
     )
-  )
-
-  col_types <- httr2::resp_header(resps[[1]], "X-SODA2-Types") |>
-    json_header_to_vec()
-  for (i in seq_along(res_list)) {
-    if (col_types[i] %in% c("url", "location")) {
-      res_list[[i]] <- tibble::as_tibble(res_list[[i]])
-    } else if (
-      col_types[i] %in%
-        c("point", "line", "polygon", "multipoint", "multiline", "multipolygon")
-    ) {
-      res_list[[i]] <- sf::st_sfc(res_list[[i]])
-    }
-
-    if (col_types[i] == "location") {
-      res_list[[i]]$geometry <- sf::st_sfc(res_list[[i]]$geometry)
-    }
+  } else if (is.null(api_key_id) || is.null(api_key_secret)) {
+    cli::cli_abort(
+      "Both an {.arg api_key_id} and {.arg api_key_secret} must be specified to authenticate a v3 request."
+    )
+  } else {
+    check_string(api_key_id)
+    check_string(api_key_secret)
+    request_version <- "v3"
   }
 
-  result <- tibble::as_tibble(res_list)
-  if (sum(sapply(res_list, \(x) inherits(x, "sfc"))) == 1) {
+  base_url <- get_base_url(url)
+  four_by_four <- get_four_by_four(url)
+
+  resps <- switch(
+    request_version,
+    v2 = {
+      create_v2_request(base_url, four_by_four) |>
+        set_v2_options(query, page_size) |>
+        perform_v2_iteration(page_size, query$limit)
+    },
+    v3 = {
+      create_v3_request(base_url, four_by_four) |>
+        set_basic_auth(api_key_id, api_key_secret) |>
+        set_v3_options(query, include_synthetic_cols, page_size) |>
+        perform_v3_iteration()
+    }
+  )
+
+  resps |>
+    parse_resps() |>
+    convert_list_to_df() |>
+    set_metdata(url, alias)
+}
+
+Sys_get_env <- function(x) {
+  envvar <- Sys.getenv(x, NA)
+  if (is.na(envvar)) {
+    NULL
+  } else {
+    envvar
+  }
+}
+
+parse_resps <- function(resps) {
+  resp_strings <- lapply(resps, httr2::resp_body_raw)
+  header_col_names <- httr2::resp_header(resps[[1]], "X-SODA2-Fields")
+  header_col_types <- httr2::resp_header(resps[[1]], "X-SODA2-Types")
+
+  resp_url <- httr2::resp_url(resps[[1]])
+  base_url <- get_base_url(resp_url)
+  four_by_four <- get_four_by_four(resp_url)
+  meta_url <- httr2::url_modify(
+    base_url,
+    path = paste0("api/views/", four_by_four)
+  )
+
+  parse_data_json(resp_strings, header_col_names, header_col_types, meta_url)
+}
+
+convert_list_to_df <- function(parsed_list) {
+  spatial_cols <- vapply(parsed_list, is_sfc, logical(1))
+  list_cols <- vapply(parsed_list, is.list, logical(1)) & !spatial_cols
+  location_cols <- vapply(parsed_list, is_location, logical(1))
+
+  parsed_list[spatial_cols] <- lapply(parsed_list[spatial_cols], sf::st_sfc)
+  parsed_list[list_cols] <- lapply(parsed_list[list_cols], tibble::as_tibble)
+  parsed_list[location_cols] <- lapply(
+    parsed_list[location_cols],
+    function(col) {
+      col$geometry <- sf::st_sfc(col$geometry)
+      col
+    }
+  )
+
+  result <- tibble::as_tibble(parsed_list)
+  if (sum(spatial_cols) == 1) {
     result <- sf::st_as_sf(result)
   }
 
-  set_metadata(result, url, alias)
+  result
 }
 
-json_header_to_vec <- function(json_string) {
-  cleaned <- gsub('^\\[|\\]$', '', json_string)
-  items <- strsplit(cleaned, '\\s*,\\s*')[[1]]
-  gsub('^"|"$', '', items)
+is_sfc <- function(x) {
+  inherits(x, "sfc")
 }
 
-iterative_requests <- function(url_base, four_by_four, query, page_size) {
-  req <- httr2::request(url_base) |>
-    httr2::req_template("GET /resource/{four_by_four}.json") |>
-    httr2::req_url_query(!!!query)
-
-  nrow_to_get <- min(query$`$limit`, Inf)
-  nrow_got <- 0
-  nrow_last_req <- min(page_size, nrow_to_get)
-
-  req <- httr2::req_url_query(req, `$limit` = nrow_last_req)
-
-  resps <- httr2::req_perform_iterative(
-    req,
-    next_req = function(resp, req) {
-      nrow_got <<- nrow_got + nrow_last_req
-      if (nrow_got >= nrow_to_get) {
-        return(NULL)
-      } else if (is.finite(nrow_to_get)) {
-        httr2::signal_total_pages(ceiling(nrow_to_get / page_size))
-      }
-
-      body_string <- httr2::resp_body_string(resp)
-      if (gsub("\\s+", "", body_string) %in% c("{}", "[]", "")) {
-        return(NULL)
-      }
-
-      httr2::req_url_query(
-        req,
-        `$offset` = nrow_got,
-        `$limit` = min(page_size, nrow_to_get - nrow_got)
-      )
-    },
-    max_reqs = Inf
-  )
-
-  resps
+is_location <- function(x) {
+  is.list(x) && is_sfc(x$geometry)
 }
 
-set_metadata <- function(result, url, alias) {
+set_metdata <- function(result, url, alias) {
   metadata <- soc_metadata_from_url(url)
   for (i in seq_along(metadata)) {
     attr(result, names(metadata)[i]) <- metadata[[i]]
   }
 
-  col_alias <- tibble::deframe(metadata$columns[c(
-    "column_name",
-    "column_label"
-  )])
+  col_alias <- metadata$columns$column_label
+  names(col_alias) <- metadata$columns$column_name
   if (alias == "replace") {
-    colnames(result) <- col_alias[colnames(result)]
+    sf_column <- attr(result, "sf_column")
+    if (!is.null(sf_column)) {
+      attr(result, "sf_column") <- col_alias[sf_column]
+    }
+    new_colnames <- col_alias[colnames(result)]
+    colnames(result)[!is.na(new_colnames)] <- new_colnames[!is.na(new_colnames)]
   } else if (alias == "label") {
     for (i in seq_along(result)) {
       attr(result[[i]], "label") <- unname(col_alias[colnames(result)[i]])

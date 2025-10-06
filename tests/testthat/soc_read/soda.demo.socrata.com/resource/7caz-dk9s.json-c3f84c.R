@@ -1,0 +1,17 @@
+structure(list(method = "GET", url = "https://soda.demo.socrata.com/resource/7caz-dk9s.json?%24select=%2A&%24limit=10000", 
+    status_code = 200L, headers = structure(list(Server = "nginx", 
+        Date = "Mon, 18 Aug 2025 16:31:22 GMT", `Content-Type` = "application/json;charset=utf-8", 
+        `Transfer-Encoding` = "chunked", Connection = "keep-alive", 
+        `Access-Control-Allow-Origin` = "*", ETag = "\"aG90ZWwuNDU5MjJfMl85eVZQb0R1YzhPdi01SmVwUllzd1VPY003OVY4---gzip56Sn3n4JEoLSlwgdaheGCuf8Kuk--gzip--gzip\"", 
+        `X-SODA2-Fields` = "[\"url_with_description\",\"url_without_description\"]", 
+        `X-SODA2-Types` = "[\"url\",\"url\"]", `X-SODA2-Data-Out-Of-Date` = "false", 
+        `X-SODA2-Truth-Last-Modified` = "Wed, 14 Oct 2020 19:54:15 GMT", 
+        `X-SODA2-Secondary-Last-Modified` = "Wed, 14 Oct 2020 19:54:15 GMT", 
+        `Last-Modified` = "Wed, 14 Oct 2020 19:54:15 GMT", Vary = "Accept-Encoding", 
+        `Content-Encoding` = "gzip", Age = "0", `X-Socrata-Region` = "aws-us-east-1-fedramp-prod", 
+        `Strict-Transport-Security` = "max-age=31536000; includeSubDomains", 
+        `X-Socrata-RequestId` = "4c3c10b3211ac5a7dade96ff59fa9e6f"), class = "httr2_headers"), 
+    body = charToRaw("[{\"url_with_description\":{\"url\":\"https://opendata.cityofnewyork.us/\",\"description\":\"I'm Description Text!\"},\"url_without_description\":{\"url\":\"https://opendata.cityofnewyork.us/\"}}\n,{\"url_with_description\":{\"url\":\"https://data.sfgov.org/\",\"description\":\"I'm Description Text!\"},\"url_without_description\":{\"url\":\"https://data.sfgov.org/\"}}\n,{\"url_with_description\":{\"url\":\"https://data.cityofchicago.org/\",\"description\":\"I'm Description Text!\"},\"url_without_description\":{\"url\":\"https://data.cityofchicago.org/\"}}]\n"), 
+    timing = c(redirect = 0, namelookup = 1.6e-05, connect = 0, 
+    pretransfer = 6.5e-05, starttransfer = 0.160431, total = 0.160488
+    ), cache = new.env(parent = emptyenv())), class = "httr2_response")

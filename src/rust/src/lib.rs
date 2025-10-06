@@ -9,7 +9,7 @@ use serde_json::Value;
 
 #[extendr]
 fn parse_data_json(
-    json_strs: Vec<String>,
+    raw_json: List,
     header_col_names: &str,
     header_col_types: &str,
     meta_url: &str,
@@ -18,10 +18,12 @@ fn parse_data_json(
         serde_json::from_str(header_col_names).expect("Failed to parse JSON array");
     let col_types: Vec<String> =
         serde_json::from_str(header_col_types).expect("Failed to parse JSON array");
-    let rows: Vec<Value> = json_strs
+    let rows: Vec<Value> = raw_json
         .iter()
-        .flat_map(|s| {
-            let parsed: Vec<Value> = serde_json::from_str(s).expect("Failed to parse JSON");
+        .flat_map(|(_, robj)| {
+            let bytes = robj.as_raw_slice().unwrap();
+            let parsed: Vec<Value> = serde_json::from_slice(bytes)
+                .expect("Failed to parse JSON");
             parsed
         })
         .collect();
@@ -33,7 +35,7 @@ fn parse_data_json(
             "number" => Column::Number(Vec::with_capacity(rows.len())),
             "fixed_timestamp" => Column::FixedTimestamp(Vec::with_capacity(rows.len())),
             "floating_timestamp" => Column::FloatingTimestamp(Vec::with_capacity(rows.len())),
-            "text" => Column::Text(Vec::with_capacity(rows.len())),
+            "text" | "row_identifier" | "row_version" => Column::Text(Vec::with_capacity(rows.len())),
             "url" => Column::Url((
                 Vec::with_capacity(rows.len()),
                 Vec::with_capacity(rows.len()),
@@ -128,10 +130,24 @@ fn parse_data_json(
     as_rlist(col_names, columns)
 }
 
+#[extendr]
+fn is_empty_raw_json(raw_json: Robj) -> bool {
+    let bytes = raw_json.as_raw_slice().unwrap();
+
+    match serde_json::from_slice::<Value>(bytes) {
+        Ok(Value::Array(arr)) => arr.is_empty(),
+        Ok(Value::Object(map)) => map.is_empty(),
+        Ok(Value::Null) => true,
+        Ok(_) => false,
+        Err(_) => false,
+    }
+}
+
 // Macro to generate exports.
 // This ensures exported functions are registered with R.
 // See corresponding C code in `entrypoint.c`.
 extendr_module! {
     mod socratadata;
     fn parse_data_json;
+    fn is_empty_raw_json;
 }
